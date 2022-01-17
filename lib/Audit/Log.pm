@@ -3,7 +3,10 @@ package Audit::Log;
 use strict;
 use warnings;
 
-# ABSTRACT: auditd log parser with no external dependencies, using no perl features past 5.8
+use 5.006;
+use v5.12.0;    # Before 5.006, v5.10.0 would not be understood.
+
+# ABSTRACT: auditd log parser with no external dependencies, using no perl features past 5.12
 
 =head1 WHY
 
@@ -107,7 +110,13 @@ sub search {
         my %parsed = map {
             my @out = split(/=/, $_);
             shift @out, join('=',@out)
-        } grep { $_ } map { s/"//g; chomp; $_ } split(/ /,$_);
+        } grep { $_ } map {
+            my $subj = $_;
+            $subj =~ s/"//g;
+            chomp $subj;
+            $subj
+        } split(/ /,$_);
+
         $line++;
         $parsed{line} = $line;
         chomp $timestamp;
