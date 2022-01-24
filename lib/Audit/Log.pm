@@ -46,8 +46,18 @@ Here's an example of dumping keyed events for the last day, which you could then
 
     ausearch --raw --key backupwatch -ts `date --date yesterday '+%x'` > yesterdays-audit.log
 
-Even then the audit log is quite likely to only have a few days of retention.
-Be sure to stash results appropriately.
+=head3 configuring retention
+
+The audit log is quite likely to have very limited retention.
+This is configured in the max_log_file and num_logs parameter of /etc/auditd/audit.conf
+You will only have max_log_file * num_logs MB of events stored, so plan according to how much you need to watch.
+
+Your specific use case should be observed, and tuned accordingly. 
+For example, the average audit log line is ~200 bytes, so you can get maybe 40k entries per log at max_log_file=8.
+Each file action is (worst case) 5 lines in the log, resulting in maybe 8k file modifications per 8MB logfile.
+
+As such, stashing results or watching very tightly around blocks of functionality is highly recommended.
+Especially in situations such as public servers which are likely to get a large amount of SSH bounces recorded in the log by default.
 
 =cut
 
