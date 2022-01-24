@@ -105,6 +105,14 @@ As such, you can build full paths like so:
     my $rows = $parser->search( type => qr/path/i, nametype=qr/delete|create|normal/i );
     my @full_paths = map { "$_->{cwd}/$_->{name}" } @$rows;
 
+=head3 Filtering by command
+
+SYSCALL records store the command which executed the call.  This is exposed as part of the parse for each child record, such as PATH or DAEMON_* records.
+Example of getting all the commands run which triggered audit events:
+
+    my $parser = Audit::Log->new(undef, 'exe')
+    my $rows = $parser->search();
+
 =cut
 
 sub search {
@@ -113,7 +121,7 @@ sub search {
     my $ret = [];
     my $in_block = 1;
     my $line = -1;
-    my $cwd = '';
+    my ($cwd, $exe, $comm) = ('','','');
     open(my $fh, '<', $self->{path});
     LINE: while (<$fh>) {
         next if index( $_, 'SYSCALL') < 0 && !$in_block;
@@ -130,6 +138,8 @@ sub search {
             my $cwd_start = index($_, 'cwd="') + 5;
             my $cwd_end   = index($_, "\n") - 1;
             $cwd = substr($_, $cwd_start, $cwd_end - $cwd_start);
+            $line++;
+            next;
         }
 
         # Replace GROUP SEPARATOR usage with simple spaces
@@ -149,9 +159,13 @@ sub search {
         $parsed{line}      = $line;
         $parsed{timestamp} = $timestamp;
         $parsed{cwd}       = $cwd;
+        $parsed{exe}       //= $exe;
+        $parsed{comm}      //= $comm;
 
         if (exists $options{key} && $parsed{type} eq 'SYSCALL') {
             $in_block = $parsed{key} =~ $options{key};
+            $exe = $parsed{exe};
+            $comm = $parsed{comm};
             $cwd = '';
             next unless $in_block;
         }
