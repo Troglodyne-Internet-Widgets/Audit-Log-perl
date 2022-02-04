@@ -6,7 +6,11 @@ use warnings;
 use 5.006;
 use v5.12.0;    # Before 5.006, v5.10.0 would not be understood.
 
-# ABSTRACT: auditd log parser with no external dependencies, using no perl features past 5.12
+use File::Which();
+use UUID::Tiny();
+use List::Util qw{uniq};
+
+# ABSTRACT: auditd log parser with minimal dependencies, using no perl features past 5.12
 
 =head1 WHY
 
@@ -46,26 +50,36 @@ Here's an example of dumping keyed events for the last day, which you could then
 
     ausearch --raw --key backupwatch -ts `date --date yesterday '+%x'` > yesterdays-audit.log
 
+If you pass 'ausearch' as the audit log path to new(), we will pipe-open to this in subsequent search() calls.
+
 =head3 configuring retention
 
 The audit log is quite likely to have very limited retention.
 This is configured in the max_log_file and num_logs parameter of /etc/auditd/audit.conf
 You will only have max_log_file * num_logs MB of events stored, so plan according to how much you need to watch.
 
-Your specific use case should be observed, and tuned accordingly. 
+Your specific use case should be observed, and tuned accordingly.
 For example, the average audit log line is ~200 bytes, so you can get maybe 40k entries per log at max_log_file=8.
 Each file action is (worst case) 5 lines in the log, resulting in maybe 8k file modifications per 8MB logfile.
 
 As such, stashing results or watching very tightly around blocks of functionality is highly recommended.
 Especially in situations such as public servers which are likely to get a large amount of SSH bounces recorded in the log by default.
 
+The block-scoped methods in this module are built to serve precisely this use case.
+
 =cut
 
 sub new {
     my ($class, $path, @returning) = @_;
     $path = '/var/log/audit/audit.log' unless $path;
-    die "Cannot access $path" unless -f $path;
-    return bless({ path => $path, returning => \@returning}, $class);
+    my $fullpath = File::Which::which('ausearch');
+
+    if ($path eq 'ausearch') {
+        die "Cannot find ausearch" unless -f $fullpath;
+    } else {
+        die "Cannot access $path" unless -f $path;
+    }
+    return bless({ path => $path, ausearch => $fullpath, returning => \@returning}, $class);
 }
 
 =head1 METHODS
@@ -132,7 +146,15 @@ sub search {
     my $in_block = 1;
     my $line = -1;
     my ($cwd, $exe, $comm) = ('','','');
-    open(my $fh, '<', $self->{path});
+    my $fh;
+    if ($self->{path} eq 'ausearch') {
+        # TODO support --comm, -ts, -sv
+        my @args = qw{--input-logs --raw};
+        push(@args, ('-k', $self->{key}));
+        open($fh, '|', qq|$self->{fullpath} @args|) or die "Could not run $self->{fullpath}!";
+    } else {
+        open($fh, '<', $self->{path}) or die "Could not open $self->{path}!";
+    }
     LINE: while (<$fh>) {
         next if index( $_, 'SYSCALL') < 0 && !$in_block;
 
@@ -197,5 +219,45 @@ sub search {
     close($fh);
     return $ret;
 }
+
+=head1 FUNCTIONS
+
+All these are block-scoped watchers provided for convenience and testing purposes.
+
+=head2 file_changes(CODE block, LIST dirs) = ARRAY
+
+Returns the list of files that changed in the proceeding block.
+
+    my @changes = file_changes { ... } qw{/tmp /mydir};
+    is(scalar(@changes), 0, "No spooky action at a distance");
+
+=cut
+
+sub file_changes(&@) {
+    my ($block,@dirs) = @_;
+    my %rules;
+
+    # Instruct auditctl to add UUID based rules
+    foreach my $dir (@dirs) {
+        $rules{$dir} = UUID::Tiny::create_uuid_as_string(UUID::Tiny::UUID_V1, UUID::Tiny::UUID_NS_DNS);
+        #TODO handle errors, etc
+        system(qw[auditctl -w], $dir, qw[-p rw -k], $rules{$dir});
+    }
+
+    $block->();
+
+    # Unload the rule, flush the log
+    foreach my $dir (@dirs) {
+        #TODO errors, flush
+        system(qw[auditctl -W], $dir);
+    }
+    # Grab events
+    my $parser = Audit::Log->new('ausearch', qw{name cwd});
+    # TODO support arrayref
+    my $entries = $parser->search('key' => [values(%rules)]);
+    return uniq map { $_->{name} =~ m/^\// ? $_->{name} : "$_->{cwd}/$_->{name}" } @$entries;
+}
+
+
 
 1;
