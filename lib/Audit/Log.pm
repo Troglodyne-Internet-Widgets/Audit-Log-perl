@@ -119,6 +119,19 @@ Example:
     # Get all records that are from the last 24 hours
     my $rows = $parser->search( type => qr/path/i, nametype=qr/delete|create|normal/i, newer => ( time - 86400 ) );
 
+=head3 Speeding it up: by command or its outcome
+
+The 'res' parameter in audit logs allows you to filter on whether or not the command had a good (or bad) exit code.
+If this option is not passed, you will get all results regardless of their exit code.
+Useful for building things like ban-on-fail watchdogs.
+
+    # Failed outbound SSH attempts.
+    # You can also pass 'exe' to specifically filter to the path of the executable
+    # or neglect to do so if somebody's trying to hide from santa's naughty list.
+    my $rows = $parser->search( res => 0, comm => 'ssh', exe => '/usr/bin/ssh' );
+    my $maybe_fake = $parser->search( res => 0, comm => 'ssh' );
+    my @naughty = List::Util::all { $_->{exe} ne '/usr/bin/ssh' } @$maybe_fake;
+
 =head3 Getting full paths with CWDs
 
 PATH records don't actually store the full path to what is acted upon unless the process acting upon it used an absolute path.
@@ -145,12 +158,13 @@ sub search {
     my $ret = [];
     my $in_block = 1;
     my $line = -1;
-    my ($cwd, $exe, $comm) = ('','','');
+    my ($cwd, $exe, $comm, $res) = ('','','','');
     my $fh;
     if ($self->{path} eq 'ausearch') {
-        # TODO support --comm, -ts, -sv
         my @args = qw{--input-logs --raw};
         push(@args, ('-k', $self->{key}));
+        push(@args, ('-sv', $options{res} ? 'yes' : 'no')) if defined $options{success};
+        push(@args, ('-comm', $options{comm})) if defined $options{comm};
         open($fh, '|', qq|$self->{fullpath} @args|) or die "Could not run $self->{fullpath}!";
     } else {
         open($fh, '<', $self->{path}) or die "Could not open $self->{path}!";
@@ -193,12 +207,14 @@ sub search {
         $parsed{cwd}       = $cwd;
         $parsed{exe}       //= $exe;
         $parsed{comm}      //= $comm;
+        $parsed{res}       //= $res;
 
         if (exists $options{key} && $parsed{type} eq 'SYSCALL') {
             $in_block = $parsed{key} =~ $options{key};
-            $exe = $parsed{exe};
+            $exe  = $parsed{exe};
             $comm = $parsed{comm};
-            $cwd = '';
+            $res  = lc($parsed{success}) eq 'yes';
+            $cwd  = '';
             next unless $in_block;
         }
 
