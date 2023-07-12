@@ -13,21 +13,22 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ['ubuntu-latest']
+        perl: [ '5.38', '5.36', '5.14' ]
+    name: Perl ${{ matrix.perl }} on ${{ matrix.os }}
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
-
-      - name: Dependencies
-        run: yes | cpan -I Test::Deep
-
-      # Runs a single command using the runners shell
-      - name: Testsuite
-        run: prove -Ilib -vm t/
+      - name: Set up perl
+        uses: shogo82148/actions-setup-perl@v1
+        with:
+          perl-version: ${{ matrix.perl }}
+      - run: perl -V
+      - run: cpanm Dist::Zilla
+	  - run: dzil authordeps --missing | cpanm
+	  - run: dzil listdeps --missing | cpanm
+      - run: dzil test
