@@ -1,5 +1,8 @@
 Revision history for Audit-Log
 
+0.005 2023-07-11 TEODESIAN
+    - Allow filtering by command status and name, optionally optimize via ausearch
+
 0.004 2023-07-11 TEODESIAN
     - Correct Repository URLs in dist meta
 
