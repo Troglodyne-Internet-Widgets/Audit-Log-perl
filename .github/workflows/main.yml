@@ -36,4 +36,4 @@ jobs:
       - name: install-deps
         run: dzil listdeps --missing | grep -v tidied | cpanm -n
       - name: run-tests
-        run: dzil test
+        run: dzil cover -test -report Coveralls
