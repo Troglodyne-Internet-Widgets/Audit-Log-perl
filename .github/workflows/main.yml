@@ -27,8 +27,10 @@ jobs:
         uses: shogo82148/actions-setup-perl@v1
         with:
           perl-version: ${{ matrix.perl }}
-      - run: perl -V
-      - run: cpanm Dist::Zilla
-	  - run: dzil authordeps --missing | cpanm
-	  - run: dzil listdeps --missing | cpanm
-      - run: dzil test
+      - name: install-deps
+        run: perl -V
+        run: cpanm Dist::Zilla
+        run: dzil authordeps --missing | cpanm
+        run: dzil listdeps --missing | cpanm
+      - name: run-tests
+        run: dzil test
