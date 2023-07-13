@@ -34,9 +34,6 @@ jobs:
           perl-version: ${{ matrix.perl }}
       - name: Install dependencies
         run: perl -V && cpanm -n Dist::Zilla && dzil authordeps --missing | cpanm -n && dzil listdeps --missing | grep -v tidied | cpanm -n
-        if: ${{ matrix.release-test }}
-        env:
-          RELEASE_TESTING: 1
       - name: Run tests (no coverage)
         if: ${{ !matrix.coverage }}
         run: dzil test
