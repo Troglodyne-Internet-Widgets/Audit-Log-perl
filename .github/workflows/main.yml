@@ -33,7 +33,7 @@ jobs:
         with:
           perl-version: ${{ matrix.perl }}
       - name: Install dependencies
-        run: perl -V && cpanm -n Dist::Zilla && dzil authordeps --missing | cpanm -n && dzil listdeps --missing | grep -v tidied | cpanm -n
+        run: perl -V && cpanm -n Dist::Zilla && dzil authordeps --missing | cpanm -n --skip-satisfied && dzil listdeps --missing | grep -v tidied | cpanm -n --skip-satisfied
       - name: Run tests (no coverage)
         if: ${{ !matrix.coverage }}
         run: dzil test
