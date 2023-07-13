@@ -32,6 +32,7 @@ jobs:
         uses: shogo82148/actions-setup-perl@v1
         with:
           perl-version: ${{ matrix.perl }}
+      - name: Install dependencies
         run: perl -V && cpanm -n Dist::Zilla && dzil authordeps --missing | cpanm -n && dzil listdeps --missing | grep -v tidied | cpanm -n
         if: ${{ matrix.release-test }}
         env:
